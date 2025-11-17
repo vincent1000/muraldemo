@@ -1,5 +1,4 @@
 import React, { useRef, useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { v4 as uuidv4 } from "uuid"; 
 import { createPortal } from 'react-dom';
 import {
   initCanvasService,
@@ -35,12 +34,12 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
   const toolbarRef = useRef(null); // 仅用于高度计算，无实际内容
   const [context, setContext] = useState(null);
   const isDrawingRef = useRef(false);
-  const [editingText, setEditingText] = useState({ title: '', summary: '' });
+  const [editingText, setEditingText] = useState({ title: '', content: '' });
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
   const [debugOpen, setDebugOpen] = useState(true);
   const [hasAddedDefaultWidgets, setHasAddedDefaultWidgets] = useState(false);
-  const [toolbarVisible, setToolbarVisible] = useState(false);
+
   // 核心状态：完全依赖 Service 层同步的状态（包含 widgets）
   const [canvasState, setCanvasState] = useState({
     userButtons: [],
@@ -161,7 +160,7 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
       // 3. 添加文字卡片（同步）
       try {
           await addWidget({
-              id: `widget-${uuidv4()}`,
+              id: "widget-card-default",
               type: CONTROL_TYPES.CARD,
               x: 50, // 左上角位置，确保可见
               y: 50,
@@ -169,13 +168,9 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
               height: 150,
               title: "Sample Card",
               content: "This is an editable card",
-              summary: "this is a summary",
-              textColor: '#333',
-              tags: 'tags',
-              timestamp: '2025-11-13',
-              mode: 'normal',
-              editTarget: 'none',
-              isEditable: true
+              bgColor: "#f0f0f0",
+              style: { color: "#333", fontSize: 14 },
+              isEditable: true,
           });
           console.log("【初始化】文字卡片添加成功");
       } catch (err) {
@@ -187,18 +182,15 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
                   widgets: [...canvasState.canvasData.widgets, {
                       id: "widget-card-default",
                       type: CONTROL_TYPES.CARD,
-                      x: 50, // 左上角位置，确保可见
+                      x: 50,
                       y: 50,
                       width: 200,
                       height: 150,
                       title: "Sample Card",
                       content: "This is an editable card",
-                      summary: "this is a summary",
-                      textColor: '#333',
-                      tags: 'tags',
-                      timestamp: '2025-11-13',
-                      mode: 'normal',
-                      editTarget: 'none'
+                      bgColor: "#f0f0f0",
+                      style: { color: "#333", fontSize: 14 },
+                      isEditable: true,
                   }]
               }
           });
@@ -207,7 +199,7 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
       // 4. 添加图片控件（同步，无延迟）
       try {
           await addWidget({
-              id: `widget-${uuidv4()}`,
+              id: "widget-image-default",
               type: CONTROL_TYPES.IMAGE,
               x: 300, // 卡片右侧，确保可见
               y: 50,
@@ -216,7 +208,6 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
               src: "https://picsum.photos/300/200", // 简化图片链接，提高加载成功率
               rotation: 0,
               isLocked: false,
-              isEditable: false,
           });
           console.log("【初始化】图片控件添加成功");
       } catch (err) {
@@ -235,7 +226,6 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
                       src: "https://picsum.photos/300/200",
                       rotation: 0,
                       isLocked: false,
-                      isEditable: false,
                   }]
               }
           });
@@ -281,7 +271,7 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
               const ctx = context;
               const widgets = canvasState.canvasData.widgets || [];
 
-              // console.log("【绘制】开始绘制，控件数：", widgets.length);
+              console.log("【绘制】开始绘制，控件数：", widgets.length);
 
               // 强制清空画布并绘制背景（避免残留）
               ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -295,7 +285,7 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
                   const viewW = widget.width * state.scale;
                   const viewH = widget.height * state.scale;
 
-                  // console.log(`【绘制】控件 ${widget.id}：`, { viewX, viewY, viewW, viewH });
+                  console.log(`【绘制】控件 ${widget.id}：`, { viewX, viewY, viewW, viewH });
 
                   // 强制绘制占位框（无论类型，确保可见）
                   ctx.strokeStyle = '#4285f4';
@@ -307,18 +297,7 @@ const OptimizedCanvasEditor = forwardRef((props, ref) => {
                   // 绘制控件内容（原有逻辑）
                   switch (widget.type) {
                       case CONTROL_TYPES.CARD:
-                          drawCard(
-                                          widget,
-                                          ctx,
-                                          viewX,
-                                          viewY,
-                                          viewW,
-                                          viewH,
-                                          widget, // 传递完整卡片数据（包含 mode/editTarget）
-                                          state.scale,
-                                          canvasState.selectedWidgetId === widget.id,
-                                          state.isEditing // 全局编辑状态（可选）
-                                        );
+                          drawCard(ctx, viewX, viewY, viewW, viewH, widget, state.scale, canvasState.selectedWidgetId === widget.id, state.isEditing);
                           break;
                       case CONTROL_TYPES.IMAGE:
                           drawImageOptimized(ctx, viewX, viewY, viewW, viewH, widget, state.scale, canvasState.selectedWidgetId === widget.id);
@@ -416,21 +395,17 @@ const initCanvasAndAddWidgets = useCallback(async () => {
   if (!hasDefaultCard) {
     try {
       await addWidget({
-              id: `widget-${uuidv4()}`,
-              type: CONTROL_TYPES.CARD,
-              x: 50, // 左上角位置，确保可见
-              y: 50,
-              width: 200,
-              height: 150,
-              title: "Sample Card",
-              content: "This is an editable card",
-              summary: "this is a summary",
-              textColor: '#333',
-              tags: 'tags',
-              timestamp: '2025-11-13',
-              mode: 'normal',
-              editTarget: 'none',
-              isEditable: true
+        id: "widget-card-default",
+        type: CONTROL_TYPES.CARD,
+        x: 100,
+        y: 100,
+        width: 200,
+        height: 150,
+        title: "Sample Card",
+        content: "This is an editable card",
+        bgColor: "#f0f0f0",
+        style: { color: "#333", fontSize: 14 },
+        isEditable: true,
       });
       console.log("【初始化】默认文字卡片添加成功");
     } catch (err) {
@@ -446,7 +421,7 @@ const initCanvasAndAddWidgets = useCallback(async () => {
       // 延迟 500ms 执行（避免连续调用）
       await new Promise(resolve => setTimeout(resolve, 500));
       await addWidget({
-        id: `widget-${uuidv4()}`,
+        id: "widget-image-default",
         type: CONTROL_TYPES.IMAGE,
         x: 300,
         y: 200,
@@ -462,7 +437,7 @@ const initCanvasAndAddWidgets = useCallback(async () => {
       try {
         await new Promise(resolve => setTimeout(resolve, 1000));
         await addWidget({
-          id: `widget-${uuidv4()}`,
+          id: "widget-image-default",
           type: CONTROL_TYPES.IMAGE,
           x: 300,
           y: 200,
@@ -530,14 +505,14 @@ useEffect(() => {
     const containerReady = !!containerRef.current;
     const socketReady = canvasState.socketConnected;
 
-    // console.log(
-    //   "【初始化】轮询检查依赖：",
-    //   "Canvas=", canvasReady,
-    //   "容器=", containerReady,
-    //   "Socket连接=", socketReady,
-    //   "已触发添加=", hasInitiated,
-    //   "已全部完成=", hasCompleted
-    // );
+    console.log(
+      "【初始化】轮询检查依赖：",
+      "Canvas=", canvasReady,
+      "容器=", containerReady,
+      "Socket连接=", socketReady,
+      "已触发添加=", hasInitiated,
+      "已全部完成=", hasCompleted
+    );
 
     // 条件：依赖就绪 + 未触发过添加流程
     if (canvasReady && containerReady && socketReady && !hasInitiated) {
@@ -577,287 +552,53 @@ useEffect(() => {
     y: (logicY * state.scale) - state.offsetY
   }), [state.scale, state.offsetX, state.offsetY]);
 
-// 工具函数：提取 DrawCard 核心绘制逻辑（纯函数，无 React 依赖）
-const drawCardContent = ({
-  ctx, // 全局 canvas 上下文
-  widget, // 卡片数据
-  viewX, // 缩放偏移后的绘制X坐标
-  viewY, // 缩放偏移后的绘制Y坐标
-  viewW, // 缩放后的宽度
-  viewH, // 缩放后的高度
-  scale, // 全局缩放比例
-  isSelected, // 是否选中
-  isHovered = false, // 是否hover（可选）
-  isDragging = false // 是否拖拽（可选）
-}) => {
-  // 解构卡片数据
-  const {
-    mode = 'normal',
-    editTarget = 'none',
-    title = '',
-    summary = '',
-    content = '',
-    textColor = '#333',
-    tags = '',
-    timestamp = ''
-  } = widget;
+  // 绘制文字卡片（适配 Service 的 text-card 类型）
+  const drawCard = (ctx, x, y, w, h, widget, scale, isSelected, isEditing) => {
+    // 使用控件自带样式，无则用默认值
+    const bgColor = widget.bgColor || '#f0f0f0';
+    const textColor = widget.style?.color || '#333';
+    const titleFontSize = (widget.style?.fontSize || 16) * scale;
+    const contentFontSize = (widget.style?.fontSize || 12) * scale;
+    const editHintFontSize = 12 * scale;
 
-  // 样式常量（与原 DrawCard 一致，按缩放比例适配）
-  const baseStyles = {
-    padding: 16,
-    toolbarHeight: 40,
-    footerHeight: 24,
-    borderWidth: 1,
-    borderRadius: 8,
-    bgColor: '#fff',
-    hoverBgColor: '#fafafa',
-    toolbarBgColor: '#f5f5f5',
-    tagColor: '#666',
-    timestampColor: '#999',
-    fontSize: 14,
-    titleFontSize: 18,
-    titleFontWeight: 'bold',
-    buttonMargin: 4,
-    buttonBgColor: '#fff',
-    buttonHoverBgColor: '#eee',
-    buttonBorderColor: '#ddd',
-    buttonBorderRadius: 4
-  };
+    // 绘制卡片背景和边框
+    ctx.fillStyle = bgColor;
+    ctx.strokeStyle = isSelected ? '#4285f4' : '#bbbbbb';
+    ctx.lineWidth = isSelected ? 2 : 1;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
 
-  // 按缩放比例计算实际样式（关键：适配全局缩放）
-  const styles = Object.fromEntries(
-    Object.entries(baseStyles).map(([key, value]) => 
-      [key, typeof value === 'number' ? value * scale : value]
-    )
-  );
-
-  // 1. 绘制卡片背景和边框
-  ctx.fillStyle = isHovered && !isDragging ? styles.hoverBgColor : styles.bgColor;
-  ctx.strokeStyle = isSelected ? '#1890ff' : '#eee';
-  ctx.lineWidth = isSelected ? 2 * scale : styles.borderWidth;
-  ctx.beginPath();
-  ctx.roundRect(viewX, viewY, viewW, viewH, styles.borderRadius);
-  ctx.fill();
-  ctx.stroke();
-
-  // 计算内容区域（扣除内边距，适配缩放）
-  const contentX = viewX + styles.padding;
-  let contentY = viewY + styles.padding;
-  const contentWidth = viewW - 2 * styles.padding;
-  let contentHeight = viewH - 2 * styles.padding;
-
-// 优化后的 drawWrapText（支持中文换行 + 避免误截断）
-const drawWrapText = (text, x, y, maxWidth, lineHeight, maxHeight = Infinity) => {
-  if (!text) return; // 空文本直接返回
-
-  ctx.font = `${styles.fontSize}px sans-serif`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = textColor;
-
-  let currentY = y;
-  const paragraphs = text.split('\n'); // 保留手动换行
-
-  for (const paragraph of paragraphs) {
-    // 先检查当前段落是否超出最大高度（提前跳过，避免无效计算）
-    if (currentY + lineHeight > y + maxHeight) {
-      ctx.fillText('...', x, currentY);
-      return;
+    // 绘制标题（如果有）
+    if (widget.title) {
+      ctx.fillStyle = textColor;
+      ctx.font = `${titleFontSize}px Arial`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(widget.title, x + 10 * scale, y + 10 * scale);
     }
 
-    let currentLine = '';
-    let currentLineWidth = 0;
-    const chars = paragraph.split('');
-
-    for (const char of chars) {
-      const charWidth = ctx.measureText(char).width;
-
-      // 字符加入后超出宽度 → 绘制当前行，新行继续
-      if (currentLineWidth + charWidth > maxWidth) {
-        ctx.fillText(currentLine, x, currentY);
-        currentY += lineHeight;
-
-        // 新行超出高度 → 截断
-        if (currentY + lineHeight > y + maxHeight) {
-          ctx.fillText(char + '...', x, currentY);
-          return;
-        }
-
-        currentLine = char;
-        currentLineWidth = charWidth;
-      } else {
-        currentLine += char;
-        currentLineWidth += charWidth;
+    // 绘制内容（支持换行）
+    ctx.font = `${contentFontSize}px Arial`;
+    ctx.fillStyle = textColor || '#666';
+    const contentLines = (widget.content || '').split('\n');
+    const contentYStart = widget.title ? 40 * scale : 10 * scale;
+    contentLines.forEach((line, index) => {
+      // 限制内容行数，避免超出卡片
+      if (index < 5) {
+        ctx.fillText(line, x + 10 * scale, y + contentYStart + (index * 20 * scale));
+      } else if (index === 5) {
+        ctx.fillText('...', x + 10 * scale, y + contentYStart + (index * 20 * scale));
       }
-    }
-
-    // 绘制当前段落的最后一行
-    ctx.fillText(currentLine, x, currentY);
-    currentY += lineHeight; // 段落间换行
-  }
-
-  // 所有文本绘制完成，无需显示省略号
-};
-
-  // 辅助函数：获取工具栏按钮
-  const getToolbarButtons = () => {
-    if (mode === 'toolbar') {
-      return [
-        { id: 'edit', label: '编辑' },
-        { id: 'expand', label: '放大' },
-        { id: 'delete', label: '删除' }
-      ];
-    } else if (mode === 'expanded') {
-      return [
-        { id: 'undo', label: '撤销' },
-        { id: 'editBody', label: '编辑正文' },
-        { id: 'color', label: '颜色' },
-        { id: 'restore', label: '恢复' },
-        { id: 'delete', label: '删除' }
-      ];
-    }
-    return [];
-  };
-
-  // 2. 绘制工具栏（toolbar/expanded 模式）
-  if (mode === 'toolbar' || mode === 'expanded') {
-    // 绘制工具栏背景
-    ctx.fillStyle = styles.toolbarBgColor;
-    ctx.beginPath();
-    ctx.rect(viewX, viewY, viewW, styles.toolbarHeight);
-    ctx.fill();
-
-    // 绘制工具栏分割线
-    ctx.strokeStyle = '#eee';
-    ctx.lineWidth = 1 * scale;
-    ctx.beginPath();
-    ctx.moveTo(viewX, viewY + styles.toolbarHeight);
-    ctx.lineTo(viewX + viewW, viewY + styles.toolbarHeight);
-    ctx.stroke();
-
-    // 绘制工具栏按钮
-    const buttons = getToolbarButtons();
-    let buttonX = viewX + styles.padding;
-    const buttonHeight = 24 * scale;
-    const buttonY = viewY + (styles.toolbarHeight - buttonHeight) / 2;
-
-    buttons.forEach(btn => {
-      // 计算按钮文本宽度（适配缩放）
-      ctx.font = `${styles.fontSize}px sans-serif`;
-      const textWidth = ctx.measureText(btn.label).width;
-      const buttonWidth = textWidth + 16 * scale; // 左右内边距 8px * 2
-
-      // 绘制按钮背景
-      ctx.fillStyle = isHovered ? styles.buttonHoverBgColor : styles.buttonBgColor;
-      ctx.strokeStyle = styles.buttonBorderColor;
-      ctx.lineWidth = 1 * scale;
-      ctx.beginPath();
-      ctx.roundRect(buttonX, buttonY, buttonWidth, buttonHeight, styles.buttonBorderRadius);
-      ctx.fill();
-      ctx.stroke();
-
-      // 绘制按钮文本
-      ctx.fillStyle = '#333';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(btn.label, buttonX + buttonWidth / 2, buttonY + buttonHeight / 2);
-
-      // 更新下一个按钮位置
-      buttonX += buttonWidth + styles.buttonMargin;
     });
 
-    // 调整内容区域位置（向下偏移工具栏高度）
-    contentY += styles.toolbarHeight;
-    contentHeight -= styles.toolbarHeight;
-  }
+    // 编辑提示
+    if (isSelected && !isEditing && widget.isEditable) {
+      ctx.fillStyle = 'rgba(66, 133, 244, 0.8)';
+      ctx.font = `${editHintFontSize}px Arial`;
+      ctx.fillText('Click to edit', x + 10 * scale, y + h - 25 * scale);
+    }
+  };
 
-  // 3. 绘制标题
-  let currentY = contentY;
-  ctx.font = `${styles.titleFontSize}px sans-serif`;
-  ctx.fontWeight = styles.titleFontWeight;
-  ctx.fillStyle = textColor;
-  const cardTitle = title || '未命名';
-  drawWrapText(cardTitle, contentX, currentY, contentWidth, 24 * scale);
-  currentY += 24 * scale + 8 * scale; // 标题高度 + 间距
-
-  // 4. 绘制正文/摘要
-  ctx.font = `${styles.fontSize}px sans-serif`;
-  // 在 drawCardContent 中，绘制摘要/正文时修改 maxHeight 计算：
-if (mode === 'expanded') {
-  const cardBody = body || '无正文内容';
-  // 修复 maxHeight：内容区域总高度 - 已用高度（标题 + 间距）
-  const maxBodyHeight = contentHeight - (currentY - contentY) - 8 * scale;
-  drawWrapText(
-    cardBody,
-    contentX,
-    currentY,
-    contentWidth,
-    20 * scale,
-    maxBodyHeight // 移除页脚高度占用（页脚在最底部，正文不会覆盖）
-  );
-} else {
-  const cardSummary = summary || '无摘要';
-  // 修复 maxHeight：内容区域总高度 - 已用高度（标题 + 间距）
-  const maxSummaryHeight = contentHeight - (currentY - contentY) - 8 * scale;
-  drawWrapText(
-    cardSummary,
-    contentX,
-    currentY,
-    contentWidth,
-    20 * scale,
-    maxSummaryHeight // 足够的显示高度，避免过早截断
-  );
-}
-  // 5. 绘制页脚（标签 + 时间戳）
-  const footerY = viewY + viewH - styles.footerHeight - styles.padding;
-  ctx.font = `${(styles.fontSize - 2) * scale}px sans-serif`;
-
-  // 绘制标签
-  ctx.fillStyle = styles.tagColor;
-  ctx.textAlign = 'left';
-  ctx.fillText(tags || 'no tag', contentX, footerY);
-
-  // 绘制时间戳
-  ctx.fillStyle = styles.timestampColor;
-  ctx.textAlign = 'right';
-  ctx.fillText(timestamp || new Date().toLocaleString(), viewX + viewW - styles.padding, footerY);
-};
-const drawCard = (
-  widget,
-  ctx,
-  viewX,
-  viewY,
-  viewW,
-  viewH,
-  canvasStateWidget, // 卡片完整数据（包含 mode/editTarget 等）
-  scale,
-  isSelected,
-  isEditing
-) => {
-  // 调用提取的核心绘制函数，传递所有必要参数
-  drawCardContent({
-    ctx,
-    widget: canvasStateWidget, // 传递完整卡片数据（包含 mode/editTarget）
-    viewX,
-    viewY,
-    viewW,
-    viewH,
-    scale,
-    isSelected,
-    isHovered: false, // 后续可通过全局状态传递 hover 状态
-    isDragging: false // 后续可通过全局状态传递拖拽状态
-  });
-
-  // （可选）保留你原有 drawCard 中的其他逻辑（如编辑模式的占位框等）
-  if (isEditing && canvasStateWidget.editTarget !== 'none') {
-    // 若需要在编辑模式绘制特殊样式，可在此添加
-    ctx.strokeStyle = '#1890ff';
-    ctx.lineWidth = 2 * scale;
-    ctx.setLineDash([5 * scale, 3 * scale]);
-    ctx.strokeRect(viewX, viewY, viewW, viewH);
-    ctx.setLineDash([]);
-  }
-};
   // 绘制图片加载失败占位符
   const drawErrorPlaceholder = (ctx, x, y, w, h) => {
     ctx.fillStyle = '#d0d0d0';
@@ -1023,34 +764,19 @@ const drawCard = (
       setErrorMsg("该卡片不可编辑");
       return;
     }
-    console.log("setSelectedWidgetId:",widget.id);
-    setToolbarVisible(true);
-    setSelectedWidgetId(widget.id); // 仅选中卡片，不进入编辑模式
     setState(prev => ({
       ...prev,
       selectedControlId: widget.id,
-      isEditing: false
+      isEditing: true
     }));
-    
-    //setEditingText({ title: widget.title || '', content: widget.content || '' });
+    setEditingText({ title: widget.title || '', content: widget.content || '' });
   };
-  const handleEditClick = (widgetId) => {
-    // 点击编辑按钮才进入编辑模式
-    if (widgetId) {
-      setState(prev => ({ ...prev, isEditing: true }));
-      setEditingText({
-        title: widgetId.title || '',
-        summary: widgetId.summary || ''
-      });
-      setToolbarVisible(false); // 隐藏工具栏
-      console.log("handleEditClick,toolbarVisible",toolbarVisible);
-    }
-  };
+
   // 保存文字卡片编辑内容
   const saveCardEditing = (widgetId) => {
     updateWidget(widgetId, {
       title: editingText.title,
-      summary: editingText.content
+      content: editingText.content
     }).catch(err => setErrorMsg("保存失败：" + err.message));
     setState(prev => ({ ...prev, isEditing: false }));
   };
@@ -1058,7 +784,6 @@ const drawCard = (
   // 文字卡片编辑表单
   const renderInCardEditor = () => {
     const selectedWidgetId = canvasState.selectedWidgetId;
-    console.log("renderInCardEditor:",selectedWidgetId);
     if (!selectedWidgetId || !state.isEditing) return null;
 
     const widgets = canvasState.canvasData.widgets || [];
@@ -1372,15 +1097,12 @@ const drawCard = (
 
   // 动态工具栏（选中控件时显示）
   const renderDynamicToolbar = useCallback(() => {
+    const selectedWidgetId = canvasState.selectedWidgetId;
+    if (!selectedWidgetId) return null;
 
     const widgets = canvasState.canvasData.widgets || [];
-    const selectedWidget = widgets.find(w => w.id === canvasState.selectedWidgetId);
-    if (!selectedWidget)
-    {
-      console.log("renderDynamicToolbar,selectedWidget is null.",canvasState.selectedWidgetId);
-      return null;
-    }
-
+    const selectedWidget = widgets.find(w => w.id === selectedWidgetId);
+    if (!selectedWidget) return null;
 
     const toolbarWidth = 420;
     const toolbarHeight = 42;
@@ -1544,7 +1266,7 @@ const drawCard = (
         <button
           onClick={() => {
             if (isTextCard) {
-              handleEditClick(selectedWidget);
+              handleCardClick(selectedWidget);
             } else {
               setState((prev) => ({ ...prev, isEditing: true }));
             }
@@ -1573,6 +1295,7 @@ const drawCard = (
     state.isEditing,
     containerRef,
     logicToView,
+    handleCardClick
   ]);
 
   // Debug 面板
@@ -1719,20 +1442,15 @@ const drawCard = (
             const centerLogic = viewToLogic(centerViewX, centerViewY);
             
             await addWidget({
-              id: `widget-${uuidv4()}`,
               type: CONTROL_TYPES.CARD,
               x: centerLogic.x - 100,
               y: centerLogic.y - 75,
               width: 200,
-              height: 350,
-              title: "Sample Card",
-              content: "This is an editable card",
-              summary: "this is a summary",
-              textColor: '#333',
-              tags: 'tags',
-              timestamp: '2025-11-13',
-              mode: 'normal',
-              editTarget: 'none',
+              height: 150,
+              title: 'New Card',
+              content: 'Editable content',
+              bgColor: '#f0f0f0',
+              style: { color: '#333', fontSize: 14 },
               isEditable: true
             });
           }}
@@ -1777,7 +1495,7 @@ const drawCard = (
               height: 200,
               src: `https://picsum.photos/seed/${Date.now()}/300/200`,
               rotation: 0,
-              isLocked: false,
+              isLocked: false
             });
           }}
           disabled={!canvasState.socketConnected}
@@ -1822,120 +1540,114 @@ const drawCard = (
       </div>
     );
   };
-const handleCardModeChange = (widgetId, newMode, newEditTarget) => {
-  setCanvasState(prev => ({
-    ...prev,
-    canvasData: {
-      ...prev.canvasData,
-      widgets: prev.canvasData.widgets.map(w =>
-        w.id === widgetId ? { ...w, mode: newMode, editTarget: newEditTarget } : w
-      )
-    }
-  }));
-};
 
-// 处理卡片数据修改（编辑标题/摘要/正文）
-const handleCardDataChange = (updatedWidget) => {
-  setCanvasState(prev => ({
-    ...prev,
-    canvasData: {
-      ...prev.canvasData,
-      widgets: prev.canvasData.widgets.map(w =>
-        w.id === updatedWidget.id ? { ...w, ...updatedWidget } : w
-      )
-    }
-  }));
-};
-  // 将原来的 handleCanvasPaste(useCallback) 改名为 handleClipboardPaste，避免与 service 冲突
-  const handleClipboardPaste = useCallback(async (e) => {
-    // 有时可能通过程序调用（如 document listener）传入的是非 DOM 事件对象，先做保护
-    if (e && typeof e.preventDefault === 'function') {
-      e.preventDefault();
+  // 剪切板粘贴处理（适配 Service 的 handleCanvasPaste 方法）
+// 将原来的 handleCanvasPaste(useCallback) 改名为 handleClipboardPaste，避免与 service 冲突
+const handleClipboardPaste = useCallback(async (e) => {
+  // 有时可能通过程序调用（如 document listener）传入的是非 DOM 事件对象，先做保护
+  if (e && typeof e.preventDefault === 'function') {
+    e.preventDefault();
+  }
+
+  const clipboardData = (e && e.clipboardData) || (window && window.clipboardData);
+  if (!clipboardData) {
+    setErrorMsg("浏览器不支持剪切板操作");
+    return;
+  }
+  if (!canvasState.socketConnected) {
+    setErrorMsg("Socket未连接，无法粘贴");
+    return;
+  }
+
+  try {
+    const items = clipboardData.items;
+    let pasteData = null;
+
+    // 先尝试通过标准 getData 快速获取纯文本（更兼容）
+    const plainText = (clipboardData.getData && clipboardData.getData('text/plain')) || '';
+    if (plainText && plainText.trim()) {
+      pasteData = { type: "text", content: plainText.trim() };
     }
 
-    const clipboardData = (e && e.clipboardData) || (window && window.clipboardData);
-    if (!clipboardData) {
-      setErrorMsg("浏览器不支持剪切板操作");
-      return;
-    }
-    if (!canvasState.socketConnected) {
-      setErrorMsg("Socket未连接，无法粘贴");
-      return;
-    }
+    // 如果没有文本，再逐项检查（支持图片、getAsString 回调等）
+    if (!pasteData && items && items.length) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
 
-    try {
-      const items = clipboardData.items;
-      let pasteData = null;
+        // 图片（File）
+        if (item.type && item.type.startsWith("image/")) {
+          const blob = item.getAsFile && item.getAsFile();
+          if (!blob) continue;
+          const base64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (ev) => resolve(ev.target.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          pasteData = { type: "image", content: base64 };
+          break;
+        }
 
-      // 先尝试通过标准 getData 快速获取纯文本（更兼容）
-      const plainText = (clipboardData.getData && clipboardData.getData('text/plain')) || '';
-      if (plainText && plainText.trim()) {
-        pasteData = { type: "text", content: plainText.trim() };
-      }
-
-      // 如果没有文本，再逐项检查（支持图片、getAsString 回调等）
-      if (!pasteData && items && items.length) {
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-
-          // 图片（File）
-          if (item.type && item.type.startsWith("image/")) {
-            const blob = item.getAsFile && item.getAsFile();
-            if (!blob) continue;
-            const base64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = (ev) => resolve(ev.target.result);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
+        // 字符串类型（兼容 getAsString 回调）
+        if (item.kind === "string" || item.type === "text/plain") {
+          if (typeof item.getAsString === "function") {
+            const text = await new Promise((resolve) => {
+              item.getAsString((s) => resolve(s));
             });
-            pasteData = { type: "image", content: base64 };
-            break;
-          }
-
-          // 字符串类型（兼容 getAsString 回调）
-          if (item.kind === "string" || item.type === "text/plain") {
-            if (typeof item.getAsString === "function") {
-              const text = await new Promise((resolve) => {
-                item.getAsString((s) => resolve(s));
-              });
-              if (text && text.trim()) {
-                pasteData = { type: "text", content: text.trim() };
-                break;
-              }
-            } else {
-              const fallbackText = (clipboardData.getData && clipboardData.getData('text/plain')) || '';
-              if (fallbackText && fallbackText.trim()) {
-                pasteData = { type: "text", content: fallbackText.trim() };
-                break;
-              }
+            if (text && text.trim()) {
+              pasteData = { type: "text", content: text.trim() };
+              break;
+            }
+          } else {
+            const fallbackText = (clipboardData.getData && clipboardData.getData('text/plain')) || '';
+            if (fallbackText && fallbackText.trim()) {
+              pasteData = { type: "text", content: fallbackText.trim() };
+              break;
             }
           }
         }
       }
-
-      if (!pasteData) {
-        setErrorMsg("剪切板无有效内容");
-        return;
-      }
-
-      // 计算粘贴位置（画布中心）
-      const container = containerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const centerViewX = rect.width / 2;
-      const centerViewY = rect.height / 2;
-      const logicPos = viewToLogic(centerViewX, centerViewY);
-
-      // 调用 服务层 的 handleCanvasPaste（alias：serviceHandleCanvasPaste），传入 pasteData 与位置
-      await serviceHandleCanvasPaste(pasteData, {
-        x: pasteData.type === "text" ? logicPos.x - 125 : logicPos.x - 150,
-        y: pasteData.type === "text" ? logicPos.y - 50 : logicPos.y - 100
-      });
-    } catch (err) {
-      setErrorMsg("粘贴失败：" + (err?.message || err));
     }
-  }, [viewToLogic, canvasState.socketConnected, serviceHandleCanvasPaste]);
 
+    if (!pasteData) {
+      setErrorMsg("剪切板无有效内容");
+      return;
+    }
+
+    // 计算粘贴位置（画布中心）
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const centerViewX = rect.width / 2;
+    const centerViewY = rect.height / 2;
+    const logicPos = viewToLogic(centerViewX, centerViewY);
+
+    // 调用 服务层 的 handleCanvasPaste（alias：serviceHandleCanvasPaste），传入 pasteData 与位置
+    await serviceHandleCanvasPaste(pasteData, {
+      x: pasteData.type === "text" ? logicPos.x - 125 : logicPos.x - 150,
+      y: pasteData.type === "text" ? logicPos.y - 50 : logicPos.y - 100
+    });
+  } catch (err) {
+    setErrorMsg("粘贴失败：" + (err?.message || err));
+  }
+}, [viewToLogic, canvasState.socketConnected, serviceHandleCanvasPaste]);
+useEffect(() => {
+  const onDocumentPaste = (e) => {
+    // 如果焦点在输入框/textarea/contentEditable，跳过以免干扰表单
+    const tgt = e.target;
+    if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA' || tgt.isContentEditable)) {
+      return;
+    }
+    // 直接传递原生事件给 handleClipboardPaste
+    handleClipboardPaste(e);
+  };
+
+  document.addEventListener('paste', onDocumentPaste);
+  return () => {
+    document.removeEventListener('paste', onDocumentPaste);
+  };
+}, [handleClipboardPaste]);
+  // 暴露给父组件的方法
   useImperativeHandle(ref, () => ({
     addWidget: (widget) => addWidget(widget),
     updateWidget: (id, updates) => updateWidget(id, updates),
@@ -2002,6 +1714,13 @@ const handleCardDataChange = (updatedWidget) => {
           ref={containerRef}
           className="flex-1 relative overflow-hidden"
            style={{ width: "100%", height: "calc(100vh - 0px)", position: "relative" }} // 明确高度
+          onClick={(e) => {
+            // 点击空白处取消选中
+            if (e.target === canvasRef.current) {
+              setSelectedWidgetId(null);
+              setState(prev => ({ ...prev, selectedControlId: null, isEditing: false }));
+            }
+          }}
           onPaste={handleClipboardPaste}
         >
           <canvas
@@ -2015,7 +1734,6 @@ const handleCardDataChange = (updatedWidget) => {
               } catch (err) {
                 console.warn('focus canvas failed', err);
               }
-              if (e.button !== 0) return;
               const rect = containerRef.current.getBoundingClientRect();
               const viewX = e.clientX - rect.left;
               const viewY = e.clientY - rect.top;
@@ -2025,6 +1743,7 @@ const handleCardDataChange = (updatedWidget) => {
               let selectedWidget = null;
               const widgets = canvasState.canvasData.widgets || [];
 
+              // 反向遍历，优先选中上层控件
               for (let i = widgets.length - 1; i >= 0; i--) {
                 const widget = widgets[i];
                 if (
@@ -2040,8 +1759,8 @@ const handleCardDataChange = (updatedWidget) => {
               }
 
               if (selectedWidget) {
+                // 同步选中状态到 Service
                 setSelectedWidgetId(selectedId);
-                console.log("setSelectedWidgetId11,",selectedId);
                 // 发送控件点击事件（缓存内容）
                 const widgetContent = selectedWidget.type === CONTROL_TYPES.CARD
                   ? selectedWidget.content || ''
@@ -2049,22 +1768,9 @@ const handleCardDataChange = (updatedWidget) => {
                 sendControlClickEvent(selectedId, widgetContent)
                   .catch(err => console.error("缓存控件内容失败：", err));
               } else {
-                if (!canvasState.selectedWidget)
-                {
-                  if (canvasState.selectedWidget.editTarget !== 'none') {
-                    // 退出编辑，保持当前模式
-                    handleCardModeChange(canvasState.selectedWidget.id, canvasState.selectedWidget.mode, 'none');
-                  } else if (canvasState.selectedWidget.mode === 'toolbar' || canvasState.selectedWidget.mode === 'expanded') {
-                    // 回到 normal 模式
-                    handleCardModeChange(canvasState.selectedWidget.id, 'normal', 'none');
-                    setCanvasState(prev => ({ ...prev, selectedWidgetId: null }));
-                  }
-                }
-                else
-                {
-                  setSelectedWidgetId(null);
-                  setState(prev => ({ ...prev, selectedControlId: null, isEditing: false }));
-                }
+                setSelectedWidgetId(null);
+                setState(prev => ({ ...prev, selectedControlId: null, isEditing: false }));
+                // 点击空白处记录位置（用于后续操作）
                 handleCanvasClick(logicPos.x, logicPos.y).catch(err => console.error("记录点击位置失败：", err));
               }
 

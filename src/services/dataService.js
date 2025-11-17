@@ -79,7 +79,7 @@ export async function addWidget(widget) {
     console.log("【Service】addWidget 本地更新控件，新增后数量：", newWidgets.length);
     updateState({
       canvasData: { ...state.canvasData, widgets: newWidgets },
-      selectedWidgetId: null
+      selectedWidgetId: widgetId
     });
 
     // 仅当 socket 已连接时尝试后端同步；否则记录日志，后面可做重试机制
@@ -169,8 +169,8 @@ export async function initCanvasService() {
     updateState({ userButtons });
 
     // 3. 订阅后端Socket事件（同步后端状态到前端）
-      subscribeToSocketEvent("cache_control_notify", (data) => {
-        try {
+    subscribeToSocketEvent("cache_control_notify", (data) => {
+      try {
         console.log("【Service】收到 cache_control_notify:", data);
         // 兼容不同命名约定：后端可能发 control_id / controlId / control_id_str 等
         const controlId = data?.control_id || data?.controlId || data?.control_id_str || data?.id || null;
@@ -184,27 +184,16 @@ export async function initCanvasService() {
         }
 
         // 根据控件类型把内容写回对应字段（image -> src，text-card -> content）
-      const updatedWidgets = state.canvasData.widgets.map((w) => {
-      if (w.id !== controlId) return w;
-
-      if (w.type === "image" || controlType === "image") {
-        // 图片控件更新 src
-        return { ...w, src: content };
-      } else if (w.type === "text") {
-        // 关键修复：卡片控件更新 summary 字段（因为只读模式显示 summary）
-        // 若后端 content 是完整数据（包含 summary/body），可解构赋值
-        if (content) {
-          // 后端返回完整结构：{ summary: "新摘要", body: "新正文" }
-          return { ...w, summary: content, body: content || w.body };
-        } else {
-          // 后端返回纯文本：直接赋值给 summary
-          return { ...w, summary: content };
-        }
-      } else {
-        // 其他控件保留原有逻辑
-        return { ...w, content };
-      }
-    });
+        const updatedWidgets = state.canvasData.widgets.map((w) => {
+          if (w.id !== controlId) return w;
+          // 保持原有字段并只修改必要字段
+          if (w.type === "image" || controlType === "image") {
+            return { ...w, src: content };
+          } else {
+            // 默认视为文字卡片
+            return { ...w, content };
+          }
+        });
 
         // 更新状态（本地直接更新，不再向后端回发，避免循环）
         updateState({
@@ -426,7 +415,7 @@ export async function handleCanvasPaste(pasteData, position) {
         x: position.x,
         y: position.y,
         width: 200, // 默认宽度
-        height: 350, // 默认高度
+        height: 150, // 默认高度
         rotation: 0, // 旋转角度
         isLocked: false, // 是否锁定（不可移动/编辑）
       };
@@ -437,13 +426,11 @@ export async function handleCanvasPaste(pasteData, position) {
       newWidget = {
         id: widgetId,
         type: "text",
-        title: "TextFromWeb",
-        content: pasteData.content,
-        summary: pasteData.content,
+        content: pasteData.content, // 剪切板文字
         x: position.x,
         y: position.y,
         width: 250, // 默认宽度
-        height: 350, // 默认高度
+        height: 100, // 默认高度
         style: defaultStyle,
         isEditable: true, // 是否可编辑
       };
