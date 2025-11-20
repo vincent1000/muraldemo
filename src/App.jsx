@@ -1,11 +1,13 @@
 import OptimizedCanvasEditor from './components/CanvasEditor';
 import TitleBar from './components/TitleBar';
-// import EditableCardList from './components/EditableCard';
+import MuralDemo from './components/mural';
 
 export default function App() {
   return (
     <div className="app">
-      <OptimizedCanvasEditor />
+      {/* <OptimizedCanvasEditor />
+      <TitleBar/> */}
+      <MuralDemo/>
       <TitleBar/>
     </div>
   );

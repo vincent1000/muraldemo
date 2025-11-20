@@ -16,7 +16,7 @@ function TitleBar({
         left: 0,
         right: 0,
         height: '60px',
-        backgroundColor: 'rgba(235, 235, 235, 0.5)',
+        backgroundColor: '#E6E6E6',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',

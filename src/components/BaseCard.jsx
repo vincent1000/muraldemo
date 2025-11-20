@@ -33,16 +33,30 @@ const BaseCard = React.memo(({
     ...style,
   };
   const handleMouseDown = (e) => {
-    e.stopPropagation(); // 阻止事件冒泡到画布，避免同时触发平移
+    // 编辑模式下：允许事件冒泡和默认行为（让文本选择工作）
+    if (state !== 'edit') {
+      e.stopPropagation(); // 阻止事件冒泡到画布，避免同时触发平移
+      e.preventDefault();
+    }
     onMouseDown(e); // 调用外部传入的onMouseDown
+  };
+  const handleClick = (e) => {
+    // 编辑模式下，点击卡片内任何位置都不应触发外部 click（避免退出编辑）
+    if (state === 'edit') return;
+    onClick(e);
+  };
+  const handleDoubleClick = (e) => {
+    // 编辑模式下，双击卡片内任何位置不应触发外部 doubleClick
+    if (state === 'edit') return;
+    onDoubleClick(e);
   };
   return (
     <div
       ref={cardRef}
       id={`card-${id}`}
       style={baseStyle}
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
       onMouseDown={handleMouseDown}
       draggable={false} // 禁止浏览器默认拖拽
     >

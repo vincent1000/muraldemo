@@ -79,7 +79,7 @@ export async function addWidget(widget) {
     console.log("【Service】addWidget 本地更新控件，新增后数量：", newWidgets.length);
     updateState({
       canvasData: { ...state.canvasData, widgets: newWidgets },
-      selectedWidgetId: widgetId
+      selectedWidgetId: null
     });
 
     // 仅当 socket 已连接时尝试后端同步；否则记录日志，后面可做重试机制
@@ -103,8 +103,8 @@ export async function addWidget(widget) {
   }
 }
 
-// 更新状态方法
-function updateState(newState) {
+// 内部更新状态方法（不通知订阅者）
+function updateStateInternal(newState) {
   // 合并状态
   state = { ...state, ...newState };
 
@@ -116,7 +116,12 @@ function updateState(newState) {
     // 保持现有 selectedWidget（除非显式修改）
     state.selectedWidget = state.canvasData.widgets.find(w => w.id === state.selectedWidgetId) || state.selectedWidget || null;
   }
+}
 
+// 更新状态方法（通知订阅者）
+function updateState(newState) {
+  updateStateInternal(newState);
+  
   console.log("【Service】updateState 触发，当前控件数量：", state.canvasData.widgets.length);
   // 通知所有订阅者
   subscribers.forEach(callback => {
@@ -154,9 +159,19 @@ export function subscribeToCanvasState(callback) {
 /**
  * 初始化画布服务（组件挂载时调用）
  * 1. 连接Socket 2. 加载用户按钮 3. 订阅后端Socket事件
+ * @param {Array} initialWidgets - 初始控件列表（可选）
  */
-export async function initCanvasService() {
+export async function initCanvasService(initialWidgets = []) {
   try {
+    // 0. 同步初始控件到状态（直接替换，不累加）
+    console.log("【Service】initCanvasService 同步初始控件数量：", initialWidgets.length, "当前状态控件数量：", state.canvasData.widgets.length);
+    updateState({
+      canvasData: {
+        ...state.canvasData,
+        widgets: initialWidgets, // 直接替换，确保前后端一致
+      },
+    });
+    
     // 1. 连接Socket
     await connectSocket();
     // 🔴 明确更新 Socket 连接状态（关键：之前可能未同步）
@@ -172,36 +187,74 @@ export async function initCanvasService() {
     subscribeToSocketEvent("cache_control_notify", (data) => {
       try {
         console.log("【Service】收到 cache_control_notify:", data);
-        // 兼容不同命名约定：后端可能发 control_id / controlId / control_id_str 等
-        const controlId = data?.control_id || data?.controlId || data?.control_id_str || data?.id || null;
-        // 后端处理结果可能放在 content / controlContent / result 等字段
-        const content = data?.content || data?.controlContent || data?.result || data?.payload || null;
-        const controlType = data?.control_type || data?.controlType || null;
+        
+        // 解析后端消息字段（兼容多种命名）
+        const controlId = data?.controlId || data?.control_id || data?.id || null;
+        const content = data?.controlContent || data?.content || data?.result || null;
+        const controlType = data?.controlType || data?.control_type || data?.type || null;
 
-        if (!controlId || (content === null || content === undefined)) {
-          console.warn("【Service】cache_control_notify 缺少必要字段，忽略：", data);
+        if (!controlId) {
+          console.warn("【Service】cache_control_notify 缺少 controlId，忽略：", data);
           return;
         }
 
-        // 根据控件类型把内容写回对应字段（image -> src，text-card -> content）
+        if (!content && content !== '') {
+          console.warn("【Service】cache_control_notify 缺少 content，忽略：", data);
+          return;
+        }
+
+        console.log(`【Service】准备更新控件: ID=${controlId}, Type=${controlType}, Content长度=${content.length}`);
+
+        // 更新 widgets 数组中的对应控件
         const updatedWidgets = state.canvasData.widgets.map((w) => {
           if (w.id !== controlId) return w;
-          // 保持原有字段并只修改必要字段
+
+          console.log(`【Service】找到匹配控件，当前类型: ${w.type}`);
+
           if (w.type === "image" || controlType === "image") {
-            return { ...w, src: content };
+            // ImageCard: 更新 imageUrl 字段
+            console.log("【Service】更新 ImageCard imageUrl");
+            return { 
+              ...w, 
+              imageUrl: content,
+              src: content,  // 兼容旧字段名
+              updatedAt: new Date().toISOString()
+            };
+          } else if (w.type === "text" || controlType === "text") {
+            // TextCard: 更新 summary 和 content，保留 title
+            console.log("【Service】更新 TextCard summary 和 content");
+            return { 
+              ...w, 
+              summary: content,  // 用于 normal 模式显示
+              content: content,  // 用于 expanded 模式显示
+              updatedAt: new Date().toISOString()
+              // title 保持不变
+            };
           } else {
-            // 默认视为文字卡片
+            // 未知类型，通用更新
+            console.warn(`【Service】未知控件类型: ${w.type}，使用通用更新`);
             return { ...w, content };
           }
         });
 
-        // 更新状态（本地直接更新，不再向后端回发，避免循环）
-        updateState({
+        // 更新状态（包括 selectedWidget 如果它被更新了）
+        const newState = {
           canvasData: {
             ...state.canvasData,
             widgets: updatedWidgets,
           },
-        });
+        };
+        
+        // 如果更新的是当前选中的卡片，也更新 selectedWidget
+        if (state.selectedWidgetId === controlId) {
+          const updatedWidget = updatedWidgets.find(w => w.id === controlId);
+          if (updatedWidget) {
+            newState.selectedWidget = updatedWidget;
+            console.log(`【Service】同时更新了 selectedWidget`);
+          }
+        }
+        
+        updateState(newState);
 
         console.log(`【Service】cache_control_notify 已更新本地控件 ${controlId}`);
       } catch (err) {
@@ -415,7 +468,7 @@ export async function handleCanvasPaste(pasteData, position) {
         x: position.x,
         y: position.y,
         width: 200, // 默认宽度
-        height: 150, // 默认高度
+        height: 350, // 默认高度
         rotation: 0, // 旋转角度
         isLocked: false, // 是否锁定（不可移动/编辑）
       };
@@ -426,11 +479,13 @@ export async function handleCanvasPaste(pasteData, position) {
       newWidget = {
         id: widgetId,
         type: "text",
-        content: pasteData.content, // 剪切板文字
+        title: "TextFromWeb",
+        content: pasteData.content,
+        summary: pasteData.content,
         x: position.x,
         y: position.y,
         width: 250, // 默认宽度
-        height: 100, // 默认高度
+        height: 350, // 默认高度
         style: defaultStyle,
         isEditable: true, // 是否可编辑
       };
@@ -516,10 +571,11 @@ export async function updateWidget(widgetId, updates) {
 }
 
 /**
- * 删除控件
+ * 删除控件（静默模式，不通知订阅者，用于前端已删除只需同步 dataService 内部状态）
  * @param {string} widgetId - 控件ID
+ * @param {boolean} silent - 是否静默删除（不通知订阅者）
  */
-export async function deleteWidget(widgetId) {
+export async function deleteWidget(widgetId, silent = false) {
   if (!widgetId) {
     throw new Error("请选中要删除的控件");
   }
@@ -532,16 +588,28 @@ export async function deleteWidget(widgetId) {
     (widget) => widget.id !== widgetId
   );
 
-  // 3. 同步状态到UI（清空选中状态）
+  // 3. 同步状态（根据 silent 参数决定是否通知订阅者）
   const updatedCanvasData = {
     ...state.canvasData,
     widgets: updatedWidgets,
   };
-  updateState({
-    canvasData: updatedCanvasData,
-    selectedWidgetId: null,
-    selectedWidget: null,
-  });
+  
+  if (silent) {
+    // 静默更新，不通知订阅者
+    updateStateInternal({
+      canvasData: updatedCanvasData,
+      selectedWidgetId: null,
+      selectedWidget: null,
+    });
+    console.log("【Service】deleteWidget 静默删除，控件数量：", updatedWidgets.length);
+  } else {
+    // 正常更新，通知订阅者
+    updateState({
+      canvasData: updatedCanvasData,
+      selectedWidgetId: null,
+      selectedWidget: null,
+    });
+  }
 
   // 4. 同步到后端
   if (state.socketConnected) {
@@ -692,7 +760,7 @@ export async function clearAllWidgets() {
 /**
  * 发送控件点击事件（让后端缓存内容）
  * @param {string} controlId - 控件ID
- * @param {string} content - 控件内容（文字/图片base64）
+ * @param {string} content - 控件内容（完整HTML或图片base64）
  */
 export async function sendControlClickEvent(controlId, content) {
   if (!state.socketConnected) {
@@ -703,8 +771,8 @@ export async function sendControlClickEvent(controlId, content) {
   }
 
   try {
-        console.log(`控件${controlId}内容已发送到后端缓存`);
-        console.log(`content:${content}内容已发送到后端缓存`);
+    console.log(`控件${controlId}内容已发送到后端缓存`);
+    console.log(`content:${content.substring(0, 100)}...`);
 
     // 发送事件到后端（Socket通信，推荐）
     await sendUiOperation("control_click", {
