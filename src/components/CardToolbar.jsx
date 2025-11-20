@@ -1,4 +1,5 @@
 import React, { useState, forwardRef, useEffect } from 'react';
+import Icon from '../utils/icon';
 
 const CardToolbar = forwardRef(({
   card,
@@ -54,27 +55,30 @@ const CardToolbar = forwardRef(({
 
   // 按钮样式
   const btnStyle = {
-    padding: `${6 * scale}px ${12 * scale}px`,
+    padding: `${6 * scale}px`,
     border: 'none',
     borderRadius: `${4 * scale}px`,
-    backgroundColor: '#f7fafc',
+    backgroundColor: 'transparent',
     color: '#2d3748',
     cursor: 'pointer',
     fontSize: `${14 * scale}px`,
-    transition: 'background-color 0.2s ease',
+    transition: 'opacity 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   };
 
   // 编辑按钮样式（区分状态）
   const editBtnStyle = {
     ...btnStyle,
-    backgroundColor: card.state === 'edit' ? '#3182ce' : '#48bb78',
+    backgroundColor: 'transparent',
     color: '#ffffff',
   };
 
   // 删除按钮样式
   const deleteBtnStyle = {
     ...btnStyle,
-    backgroundColor: '#e53e3e',
+    backgroundColor: 'transparent',
     color: '#ffffff',
   };
 
@@ -110,32 +114,54 @@ const CardToolbar = forwardRef(({
 
   return (
     <div ref={ref} style={toolbarStyle}>
-      {/* 撤销按钮 */}
-      <button
-        style={btnStyle}
-        onClick={() => onUndo(card.id)}
-        disabled={card.history && card.history.length === 0} // 无历史时禁用
-      >
-        u
-      </button>
+      {/* 撤销按钮 - 仅在编辑模式显示 */}
+      {!isImageCard && card.state === 'edit' && (
+        <button
+          style={btnStyle}
+          onClick={() => onUndo(card.id)}
+          disabled={card.history && card.history.length === 0} // 无历史时禁用
+          title="撤销 (最多20次)"
+        >
+          <Icon 
+            name="undo" 
+            size={18 * scale} 
+            disabled={card.history && card.history.length === 0}
+          />
+        </button>
+      )}
 
-      {/* 编辑按钮 - 仅 TextCard 显示 */}
+      {/* 编辑/保存按钮 - 仅 TextCard 显示 */}
       {!isImageCard && (
         <button
           style={editBtnStyle}
           onClick={() => onToggleEdit(card.id)}
+          title={card.state === 'edit' ? '完成编辑' : '编辑'}
         >
-          {card.state === 'edit' ? 'finish' : 'edit'}
+          <Icon 
+            name={card.state === 'edit' ? 'save' : 'edit'} 
+            size={18 * scale}
+            color="#ffffff"
+            hoverColor="#ffffff"
+          />
         </button>
       )}
 
-      {/* 颜色选择器 - 仅 TextCard 显示 */}
+      {/* 颜色选择器 - 仅 TextCard 且编辑模式显示 */}
       {!isImageCard && (
         <div style={colorPickerStyle}>
-          <button style={btnStyle} onClick={() => setShowColorPicker(!showColorPicker)}>
-            C
+          <button 
+            style={btnStyle} 
+            onClick={() => card.state === 'edit' && setShowColorPicker(!showColorPicker)}
+            disabled={card.state !== 'edit'}
+            title={card.state === 'edit' ? '选择颜色' : '颜色 (仅编辑时可用)'}
+          >
+            <Icon 
+              name={card.state === 'edit' ? 'colorEnable' : 'colorDisable'} 
+              size={18 * scale}
+              disabled={card.state !== 'edit'}
+            />
           </button>
-          {showColorPicker && (
+          {showColorPicker && card.state === 'edit' && (
             <div style={colorGridStyle}>
               {colorOptions.map(color => (
                 <div
@@ -161,16 +187,26 @@ const CardToolbar = forwardRef(({
       <button
         style={btnStyle}
         onClick={() => onResize(card.id)}
+        title={card.mode === 'normal' ? '展开' : '恢复正常'}
       >
-        {card.mode === 'normal' ? 'E' : 'R'}
+        <Icon 
+          name={card.mode === 'normal' ? 'toExpand' : 'toNormal'} 
+          size={18 * scale}
+        />
       </button>
 
       {/* 删除按钮 */}
       <button
         style={deleteBtnStyle}
         onClick={() => onDelete(card.id)}
+        title="删除"
       >
-        d
+        <Icon 
+          name="delete" 
+          size={18 * scale}
+          color="#ffffff"
+          hoverColor="#ffffff"
+        />
       </button>
     </div>
   );

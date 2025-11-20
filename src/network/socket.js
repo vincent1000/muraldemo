@@ -3,6 +3,13 @@ import { io } from "socket.io-client";
 const BASE_URL = "http://localhost:8000";
 const socket = io(BASE_URL, {
   autoConnect: false,
+  transports: ['websocket', 'polling'], // 尝试 websocket,失败则用 polling
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 5,
+  timeout: 20000,
+  forceNew: true
 });
 
 const socketSubscribers = new Map(); // key: 消息类型（如 "selection_type"）, value: 回调函数数

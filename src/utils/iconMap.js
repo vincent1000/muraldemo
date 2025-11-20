@@ -1,13 +1,23 @@
 // src/icons/iconMap.js
 // 映射：Icon 名称 → SVG 路径
+import undoSvg from '../assets/undo.svg';
+import editSvg from '../assets/edit.svg';
+import colorDisableSvg from '../assets/colorDisable.svg';
+import colorEnableSvg from '../assets/colorEnable.svg';
+import saveSvg from '../assets/save.svg';
+import toExpandSvg from '../assets/toExpand.svg';
+import toNormalSvg from '../assets/toNormal.svg';
+import deleteSvg from '../assets/delete.svg';
+
 export const iconMap = {
-  undo: () => import('../assets/undo.svg?react'), // Vite 支持 ?react 直接转为组件
-  edit: () => import('../assets/edit.svg?react'),
-  color: () => import('../assets/color.svg?react'),
-  scale: () => import('../assets/scale.svg?react'),
-  delete: () => import('../assets/delete.svg?react'),
-  // 新增 Icon 只需添加一行
-  // add: () => import('./svg/add.svg?react'),
+  undo: undoSvg,
+  edit: editSvg,
+  colorDisable: colorDisableSvg,
+  colorEnable: colorEnableSvg,
+  save: saveSvg,
+  toExpand: toExpandSvg,
+  toNormal: toNormalSvg,
+  delete: deleteSvg,
 };
 
 // 导出所有 Icon 名称（用于类型提示）
