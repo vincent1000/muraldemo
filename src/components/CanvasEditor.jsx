@@ -1239,10 +1239,7 @@ useEffect(() => {
         {/* 缓存内容到后端 */}
         <button
           onClick={() => {
-            const content = selectedWidget.type === CONTROL_TYPES.CARD 
-              ? selectedWidget.content || '' 
-              : selectedWidget.src || '';
-            sendControlClickEvent(selectedWidgetId, content)
+            sendControlClickEvent(selectedWidget)
               .then(() => setErrorMsg("缓存成功！"))
               .catch((err) => setErrorMsg("缓存失败：" + err.message));
           }}
@@ -1761,11 +1758,8 @@ useEffect(() => {
               if (selectedWidget) {
                 // 同步选中状态到 Service
                 setSelectedWidgetId(selectedId);
-                // 发送控件点击事件（缓存内容）
-                const widgetContent = selectedWidget.type === CONTROL_TYPES.CARD
-                  ? selectedWidget.content || ''
-                  : selectedWidget.src || '';
-                sendControlClickEvent(selectedId, widgetContent)
+                // 发送控件点击事件（缓存内容，传递完整 widget 对象包含富文本）
+                sendControlClickEvent(selectedWidget)
                   .catch(err => console.error("缓存控件内容失败：", err));
               } else {
                 setSelectedWidgetId(null);

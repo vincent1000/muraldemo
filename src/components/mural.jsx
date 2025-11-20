@@ -820,28 +820,34 @@ const handleWheel = useCallback((e) => {
     const selectedCard = cards.find(c => c.id === canvasState.selectedCardId);
     if (!selectedCard) return;
     
-    // 准备发送的内容
-    let content = '';
-    if (selectedCard.type === 'text') {
-      // 文本卡片：发送完整HTML内容（包含所有样式）
-      content = selectedCard.content || selectedCard.summary || selectedCard.title || '';
-    } else if (selectedCard.type === 'image') {
-      // 图片卡片：发送 imageUrl
-      content = selectedCard.imageUrl || '';
-    }
+    // 验证卡片是否有内容
+    const hasContent = selectedCard.type === 'text' 
+      ? (selectedCard.content || selectedCard.summary || selectedCard.title)
+      : (selectedCard.imageUrl || selectedCard.src);
     
-    if (!content) {
+    if (!hasContent) {
       console.warn('[mural] 选中的卡片内容为空，不发送到后端');
       return;
     }
     
-    // 发送到后端
+    // 发送到后端（发送完整的卡片对象，包含所有富文本信息）
     const notifyBackend = async () => {
       try {
-        await sendControlClickEvent(selectedCard.id, content);
+        await sendControlClickEvent(selectedCard);
         lastNotifiedCardIdRef.current = selectedCard.id; // 记录已通知的卡片ID
         console.log('[mural] 已通知后端选中卡片:', selectedCard.id, '类型:', selectedCard.type);
-        console.log('[mural] 内容预览:', content.substring(0, 100));
+        
+        if (selectedCard.type === 'text') {
+          console.log('[mural] 发送完整富文本信息:');
+          console.log('  - title:', selectedCard.title?.substring(0, 100));
+          console.log('  - summary:', selectedCard.summary?.substring(0, 100));
+          console.log('  - content:', selectedCard.content?.substring(0, 100));
+          
+          // 检测是否包含样式信息
+          const content = selectedCard.content || selectedCard.summary || '';
+          const hasStyles = /<span style=|<strong>|<em>|<u>/.test(content);
+          console.log('[mural] 内容包含富文本样式:', hasStyles);
+        }
       } catch (err) {
         console.error('[mural] 通知后端失败:', err);
       }

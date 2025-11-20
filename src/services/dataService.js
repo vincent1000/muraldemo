@@ -759,29 +759,46 @@ export async function clearAllWidgets() {
 // canvasService.js 新增方法
 /**
  * 发送控件点击事件（让后端缓存内容）
- * @param {string} controlId - 控件ID
- * @param {string} content - 控件内容（完整HTML或图片base64）
+ * @param {Object} card - 完整的卡片对象
  */
-export async function sendControlClickEvent(controlId, content) {
+export async function sendControlClickEvent(card) {
   if (!state.socketConnected) {
     throw new Error("Socket未连接，无法缓存控件内容");
   }
-  if (!controlId || !content) {
-    throw new Error("控件ID或内容不能为空");
+  if (!card || !card.id) {
+    throw new Error("卡片对象或ID不能为空");
   }
 
   try {
-    console.log(`控件${controlId}内容已发送到后端缓存`);
-    console.log(`content:${content.substring(0, 100)}...`);
+    console.log(`控件${card.id}完整信息已发送到后端缓存`);
+    
+    // 准备发送的数据（包含所有富文本信息）
+    const payload = {
+      controlId: card.id,
+      controlType: card.type || "text",
+    };
+    
+    if (card.type === 'text') {
+      // 文本卡片：发送所有字段（title、summary、content），这些字段中包含完整的 HTML 富文本
+      payload.title = card.title || '';
+      payload.summary = card.summary || '';
+      payload.content = card.content || '';
+      // 主要内容（优先使用 content，因为它包含最完整的富文本）
+      payload.controlContent = card.content || card.summary || card.title || '';
+      
+      console.log('[dataService] 发送文本卡片富文本信息:');
+      console.log('  - title:', card.title?.substring(0, 100));
+      console.log('  - summary:', card.summary?.substring(0, 100));
+      console.log('  - content:', card.content?.substring(0, 100));
+    } else if (card.type === 'image') {
+      // 图片卡片：发送 imageUrl
+      payload.controlContent = card.imageUrl || card.src || '';
+      payload.imageUrl = card.imageUrl || card.src || '';
+    }
 
     // 发送事件到后端（Socket通信，推荐）
-    await sendUiOperation("control_click", {
-      controlId: controlId,
-      controlContent: content,
-      controlType: state.selectedWidget?.type || "text",
-      controlPrompt: "test",
-    });
-    console.log(`控件${controlId}内容已发送到后端缓存`);
+    await sendUiOperation("control_click", payload);
+    console.log(`控件${card.id}完整信息已发送到后端缓存`);
   } catch (err) {
     console.error("发送控件点击事件失败：", err);
     throw err;
